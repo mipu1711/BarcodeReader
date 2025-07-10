@@ -121,6 +121,7 @@ namespace BarcodeReader
         BarcodeTcpServer barcodeTcpServer = new BarcodeTcpServer();
         private void frm_Main_Load(object sender, EventArgs e)
         {
+            UpdateStatus("Initializing...", Color.Blue);
 
 
             Globals.configFilePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Globals.configFilePath);
@@ -206,6 +207,7 @@ namespace BarcodeReader
             barcodeTcpServer.OnBarcodeReadAsync = GetBarcodeFromTriggerAsync;
             //Globals.ShowLog("Máy chủ TCP đã khởi động thành công.", Color.Green, ShowLogType.SaveLogToFile);
             Globals.ShowLog($"Máy chủ TCP đã khởi động trên cổng {Config.Instance.Port}.", Color.Green, ShowLogType.SaveLogToFile);
+            UpdateStatus("Ready", Color.Green);
 
         }
 
@@ -218,12 +220,14 @@ namespace BarcodeReader
         {
             if (!barcodeTcpServer.IsRunning())
             {
+                UpdateStatus("TCP server not running", Color.Red);
                 Globals.ShowLog("Máy chủ TCP không hoạt động.", Color.Red, ShowLogType.SaveLogToFile);
                 return string.Empty;
             }
 
             if (string.IsNullOrWhiteSpace(Config.Instance.ImagePath) || !Directory.Exists(Config.Instance.ImagePath))
             {
+                UpdateStatus("Invalid image path", Color.Red);
                 Globals.ShowLog("Đường dẫn hình ảnh không hợp lệ hoặc không tồn tại.", Color.Red, ShowLogType.SaveLogToFile);
                 return string.Empty;
             }
@@ -232,6 +236,7 @@ namespace BarcodeReader
             string[] pngFiles = Directory.GetFiles(Config.Instance.ImagePath, "*.png");
             if (pngFiles.Length == 0)
             {
+                UpdateStatus("No PNG files found", Color.Red);
                 Globals.ShowLog("Không tìm thấy tệp hình ảnh PNG nào trong thư mục đã chỉ định.", Color.Red, ShowLogType.SaveLogToFile);
                 return string.Empty;
             }
@@ -242,6 +247,8 @@ namespace BarcodeReader
 
             try
             {
+                UpdateStatus("Loading image...", Color.Blue);
+                
                 // Đọc hình ảnh bằng MemoryStream để tránh lock file
                 byte[] imageBytes = File.ReadAllBytes(imagePath);
                 using (var ms = new MemoryStream(imageBytes))
@@ -252,35 +259,45 @@ namespace BarcodeReader
                 Globals.ShowLog($"Đang xử lý hình ảnh: {Path.GetFileName(imagePath)}", Color.Blue, ShowLogType.SaveLogToFile);
 
                 // Thử đọc ảnh gốc trước
+                UpdateStatus("Reading original image...", Color.Blue);
                 result = await TryReadBarcodeAsync(originalImage, "ảnh gốc");
                 
                 if (!string.IsNullOrEmpty(result))
                 {
+                    UpdateStatus("Barcode found!", Color.Green);
                     return result;
                 }
 
                 // Nếu không thành công và image processing được bật
                 if (Config.Instance.EnableImageProcessing)
                 {
+                    UpdateStatus("Starting advanced processing...", Color.Orange);
                     Globals.ShowLog("Bắt đầu xử lý ảnh nâng cao...", Color.Orange, ShowLogType.SaveLogToFile);
                     result = await ProcessImageWithEnhancementsAsync(originalImage);
                 }
 
                 if (string.IsNullOrEmpty(result))
                 {
+                    UpdateStatus("No barcode found after all processing", Color.Red);
                     Globals.ShowLog("Không thể đọc mã vạch sau tất cả các phương pháp xử lý.", Color.Red, ShowLogType.SaveLogToFile);
+                }
+                else
+                {
+                    UpdateStatus("Barcode found with processing!", Color.Green);
                 }
 
                 return result;
             }
             catch (Exception ex)
             {
+                UpdateStatus("Error reading image", Color.Red);
                 Globals.ShowLog($"Lỗi khi đọc hình ảnh: {ex.Message}", Color.Red, ShowLogType.SaveLogToFile);
                 return string.Empty;
             }
             finally
             {
                 originalImage?.Dispose();
+                UpdateStatus("Ready", Color.Blue);
             }
         }
 
@@ -305,11 +322,13 @@ namespace BarcodeReader
                         
                         if (processedImage != null)
                         {
+                            UpdateStatus($"Trying: {method.Name}", Color.Blue);
                             Globals.ShowLog($"Đang thử đọc với phương pháp: {method.Name}", Color.Blue, ShowLogType.SaveLogToFile);
                             result = await TryReadBarcodeAsync(processedImage, method.Name);
                             
                             if (!string.IsNullOrEmpty(result))
                             {
+                                UpdateStatus($"Success with: {method.Name}", Color.Green);
                                 Globals.ShowLog($"Thành công với phương pháp: {method.Name}", Color.Green, ShowLogType.SaveLogToFile);
                                 break;
                             }
@@ -462,6 +481,17 @@ namespace BarcodeReader
         {
             public string Name { get; set; }
             public Func<Bitmap, Bitmap> ProcessMethod { get; set; }
+        }
+
+        private void UpdateStatus(string message, Color color)
+        {
+            if (lbl_status.InvokeRequired)
+            {
+                lbl_status.BeginInvoke(new Action(() => UpdateStatus(message, color)));
+                return;
+            }
+            lbl_status.Text = message;
+            lbl_status.ForeColor = color;
         }
 
         private void DeleteAllImages()

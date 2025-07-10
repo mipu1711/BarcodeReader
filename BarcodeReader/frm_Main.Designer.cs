@@ -31,6 +31,7 @@
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.txt_Log = new System.Windows.Forms.RichTextBox();
             this.btn_config = new System.Windows.Forms.Button();
+            this.lbl_status = new System.Windows.Forms.Label();
             this.tableLayoutPanel1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -42,6 +43,7 @@
             this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanel1.Controls.Add(this.txt_Log, 0, 1);
             this.tableLayoutPanel1.Controls.Add(this.btn_config, 2, 0);
+            this.tableLayoutPanel1.Controls.Add(this.lbl_status, 0, 0);
             this.tableLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanel1.Location = new System.Drawing.Point(0, 0);
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
@@ -75,6 +77,20 @@
             this.btn_config.UseVisualStyleBackColor = true;
             this.btn_config.Click += new System.EventHandler(this.btn_config_Click);
             // 
+            // lbl_status
+            // 
+            this.tableLayoutPanel1.SetColumnSpan(this.lbl_status, 2);
+            this.lbl_status.AutoSize = true;
+            this.lbl_status.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lbl_status.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lbl_status.ForeColor = System.Drawing.Color.Blue;
+            this.lbl_status.Location = new System.Drawing.Point(3, 0);
+            this.lbl_status.Name = "lbl_status";
+            this.lbl_status.Size = new System.Drawing.Size(974, 50);
+            this.lbl_status.TabIndex = 2;
+            this.lbl_status.Text = "Ready";
+            this.lbl_status.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
             // frm_Main
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
@@ -95,6 +111,7 @@
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
         private System.Windows.Forms.RichTextBox txt_Log;
         private System.Windows.Forms.Button btn_config;
+        private System.Windows.Forms.Label lbl_status;
     }
 }
 

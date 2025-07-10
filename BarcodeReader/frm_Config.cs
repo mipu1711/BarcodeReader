@@ -27,6 +27,10 @@ namespace BarcodeReader
             txt_port.Text = Config.Instance.Port.ToString();
             cb_readType.SelectedIndex = (int)Config.Instance.ReadType;
             cb_barcodeFormat.SelectedItem = (int)Config.Instance.BarcodeType;
+            
+            // Load image processing settings
+            chk_enableImageProcessing.Checked = Config.Instance.EnableImageProcessing;
+            txt_timeout.Text = Config.Instance.ProcessingTimeoutSeconds.ToString();
         }
 
         private void btn_cancle_Click(object sender, EventArgs e)
@@ -63,6 +67,11 @@ namespace BarcodeReader
                 Globals.ShowLog("Cổng phải là một số nguyên dương.", Color.Red, ShowLogType.SaveLogToFile);
                 return;
             }
+            if (!int.TryParse(txt_timeout.Text, out int timeout) || timeout <= 0)
+            {
+                Globals.ShowLog("Timeout phải là một số nguyên dương.", Color.Red, ShowLogType.SaveLogToFile);
+                return;
+            }
             // Save configuration
             Config.Instance.ImagePath = txt_path.Text;
             Config.Instance.MiddleCharacter = txt_middle.Text;
@@ -70,6 +79,10 @@ namespace BarcodeReader
             Config.Instance.Port = Convert.ToInt32(txt_port.Text);
             Config.Instance.ReadType = (ReadType)cb_readType.SelectedItem;
             Config.Instance.BarcodeType = (barcodeType)cb_barcodeFormat.SelectedItem;
+            
+            // Save image processing settings
+            Config.Instance.EnableImageProcessing = chk_enableImageProcessing.Checked;
+            Config.Instance.ProcessingTimeoutSeconds = Convert.ToInt32(txt_timeout.Text);
             // Save to file
             if (!System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(Globals.configFilePath)))
             {
