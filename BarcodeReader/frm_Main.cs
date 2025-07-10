@@ -63,7 +63,7 @@ namespace BarcodeReader
             };
 
         }
-        Bitmap image = null;
+        
         private void frm_Main_FormClosing(object sender, FormClosingEventArgs e)
         {
             if (barcodeTcpServer.IsRunning())
@@ -145,6 +145,25 @@ namespace BarcodeReader
                             Config.Instance.ReadType = config.ReadType;
                             Config.Instance.BarcodeType = config.BarcodeType;
 
+                            // Copy image processing settings
+                            Config.Instance.EnableImageProcessing = config.EnableImageProcessing;
+                            Config.Instance.ProcessingTimeoutSeconds = config.ProcessingTimeoutSeconds;
+                            Config.Instance.EnableContrastEnhancement = config.EnableContrastEnhancement;
+                            Config.Instance.ContrastLevel = config.ContrastLevel;
+                            Config.Instance.EnableSharpening = config.EnableSharpening;
+                            Config.Instance.SharpeningLevel = config.SharpeningLevel;
+                            Config.Instance.EnableBrightnessAdjustment = config.EnableBrightnessAdjustment;
+                            Config.Instance.BrightnessLevel = config.BrightnessLevel;
+                            Config.Instance.EnableGammaCorrection = config.EnableGammaCorrection;
+                            Config.Instance.GammaLevel = config.GammaLevel;
+                            Config.Instance.EnableBlurUnsharp = config.EnableBlurUnsharp;
+                            Config.Instance.BlurRadius = config.BlurRadius;
+                            Config.Instance.EnableBinaryThreshold = config.EnableBinaryThreshold;
+                            Config.Instance.ThresholdValue = config.ThresholdValue;
+                            Config.Instance.EnableMorphological = config.EnableMorphological;
+                            Config.Instance.MorphologySize = config.MorphologySize;
+                            Config.Instance.EnableHistogramEqualization = config.EnableHistogramEqualization;
+
                             Globals.ShowLog("Cấu hình đã được tải thành công.", Color.Green, ShowLogType.SaveLogToFile);
                         }
                     }
@@ -184,7 +203,7 @@ namespace BarcodeReader
                 MessageBox.Show("Không thể khởi động máy chủ TCP. Vui lòng kiểm tra cài đặt và thử lại.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            barcodeTcpServer.OnBarcodeRead += GetBarcodeFromTrigger;
+            barcodeTcpServer.OnBarcodeReadAsync = GetBarcodeFromTriggerAsync;
             //Globals.ShowLog("Máy chủ TCP đã khởi động thành công.", Color.Green, ShowLogType.SaveLogToFile);
             Globals.ShowLog($"Máy chủ TCP đã khởi động trên cổng {Config.Instance.Port}.", Color.Green, ShowLogType.SaveLogToFile);
 
@@ -195,7 +214,7 @@ namespace BarcodeReader
             Form frmConfig = new frm_Config();
             frmConfig.ShowDialog();
         }
-        private string GetBarcodeFromTrigger()
+        private async Task<string> GetBarcodeFromTriggerAsync()
         {
             if (!barcodeTcpServer.IsRunning())
             {
@@ -219,13 +238,7 @@ namespace BarcodeReader
 
             string imagePath = pngFiles[0]; // Lấy tệp hình ảnh đầu tiên
             string result = string.Empty;
-
-            // Dispose image cũ trước khi tạo mới
-            if (image != null)
-            {
-                image.Dispose();
-                image = null;
-            }
+            Bitmap originalImage = null;
 
             try
             {
@@ -233,74 +246,222 @@ namespace BarcodeReader
                 byte[] imageBytes = File.ReadAllBytes(imagePath);
                 using (var ms = new MemoryStream(imageBytes))
                 {
-                    image = new Bitmap(ms);
+                    originalImage = new Bitmap(ms);
                 }
 
                 Globals.ShowLog($"Đang xử lý hình ảnh: {Path.GetFileName(imagePath)}", Color.Blue, ShowLogType.SaveLogToFile);
+
+                // Thử đọc ảnh gốc trước
+                result = await TryReadBarcodeAsync(originalImage, "ảnh gốc");
+                
+                if (!string.IsNullOrEmpty(result))
+                {
+                    return result;
+                }
+
+                // Nếu không thành công và image processing được bật
+                if (Config.Instance.EnableImageProcessing)
+                {
+                    Globals.ShowLog("Bắt đầu xử lý ảnh nâng cao...", Color.Orange, ShowLogType.SaveLogToFile);
+                    result = await ProcessImageWithEnhancementsAsync(originalImage);
+                }
+
+                if (string.IsNullOrEmpty(result))
+                {
+                    Globals.ShowLog("Không thể đọc mã vạch sau tất cả các phương pháp xử lý.", Color.Red, ShowLogType.SaveLogToFile);
+                }
+
+                return result;
             }
             catch (Exception ex)
             {
                 Globals.ShowLog($"Lỗi khi đọc hình ảnh: {ex.Message}", Color.Red, ShowLogType.SaveLogToFile);
                 return string.Empty;
             }
-
-            try
-            {
-                if (Config.Instance.ReadType == ReadType.SingleCode)
-                {
-                    // Đọc mã vạch từ hình ảnh
-                    Result barcode = barcodeReader.Decode(image);
-                    if (barcode != null)
-                    {
-                        result = barcode.Text;
-                        Globals.ShowLog($"Đã đọc mã vạch: {result}", Color.Green, ShowLogType.SaveLogToFile);
-                    }
-                    else
-                    {
-                        Globals.ShowLog("Không tìm thấy mã vạch trong hình ảnh.", Color.Orange, ShowLogType.SaveLogToFile);
-                        result = string.Empty;
-                    }
-                }
-                else if (Config.Instance.ReadType == ReadType.MultiCode)
-                {
-                    Result[] barcodes = barcodeReader.DecodeMultiple(image);
-                    if (barcodes != null && barcodes.Length > 0)
-                    {
-                        List<string> barcodeTexts = barcodes
-                            .Where(b => b != null && !string.IsNullOrWhiteSpace(b.Text))
-                            .Select(b => b.Text.Trim())
-                            .ToList();
-
-                        if (barcodeTexts.Count > 0)
-                        {
-                            result = string.Join(Config.Instance.MiddleCharacter, barcodeTexts);
-                            Globals.ShowLog($"Đã đọc {barcodeTexts.Count} mã vạch: {result}", Color.Green, ShowLogType.SaveLogToFile);
-                        }
-                        else
-                        {
-                            Globals.ShowLog("Tất cả mã vạch đọc được đều không hợp lệ.", Color.Orange, ShowLogType.SaveLogToFile);
-                            result = string.Empty;
-                        }
-                    }
-                    else
-                    {
-                        Globals.ShowLog("Không tìm thấy mã vạch nào trong hình ảnh.", Color.Orange, ShowLogType.SaveLogToFile);
-                        result = string.Empty;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Globals.ShowLog($"Lỗi khi đọc mã vạch: {ex.Message}", Color.Red, ShowLogType.SaveLogToFile);
-                result = string.Empty;
-            }
             finally
             {
-                // Xóa toàn bộ ảnh sau khi đọc xong (bất kể thành công hay thất bại)
-                //DeleteAllImages();
+                originalImage?.Dispose();
+            }
+        }
+
+        private async Task<string> ProcessImageWithEnhancementsAsync(Bitmap originalImage)
+        {
+            var processingMethods = GetEnabledProcessingMethods();
+            string result = string.Empty;
+
+            foreach (var method in processingMethods)
+            {
+                if (!string.IsNullOrEmpty(result))
+                    break;
+
+                try
+                {
+                    Bitmap processedImage = null;
+                    
+                    try
+                    {
+                        // Áp dụng phương pháp xử lý
+                        processedImage = await Task.Run(() => method.ProcessMethod(originalImage));
+                        
+                        if (processedImage != null)
+                        {
+                            Globals.ShowLog($"Đang thử đọc với phương pháp: {method.Name}", Color.Blue, ShowLogType.SaveLogToFile);
+                            result = await TryReadBarcodeAsync(processedImage, method.Name);
+                            
+                            if (!string.IsNullOrEmpty(result))
+                            {
+                                Globals.ShowLog($"Thành công với phương pháp: {method.Name}", Color.Green, ShowLogType.SaveLogToFile);
+                                break;
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        processedImage?.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Globals.ShowLog($"Lỗi khi áp dụng {method.Name}: {ex.Message}", Color.Red, ShowLogType.SaveLogToFile);
+                }
             }
 
             return result;
+        }
+
+        private async Task<string> TryReadBarcodeAsync(Bitmap image, string methodName)
+        {
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    if (Config.Instance.ReadType == ReadType.SingleCode)
+                    {
+                        Result barcode = barcodeReader.Decode(image);
+                        if (barcode != null)
+                        {
+                            string result = barcode.Text;
+                            Globals.ShowLog($"Đã đọc mã vạch với {methodName}: {result}", Color.Green, ShowLogType.SaveLogToFile);
+                            return result;
+                        }
+                    }
+                    else if (Config.Instance.ReadType == ReadType.MultiCode)
+                    {
+                        Result[] barcodes = barcodeReader.DecodeMultiple(image);
+                        if (barcodes != null && barcodes.Length > 0)
+                        {
+                            List<string> barcodeTexts = barcodes
+                                .Where(b => b != null && !string.IsNullOrWhiteSpace(b.Text))
+                                .Select(b => b.Text.Trim())
+                                .ToList();
+
+                            if (barcodeTexts.Count > 0)
+                            {
+                                string result = string.Join(Config.Instance.MiddleCharacter, barcodeTexts);
+                                Globals.ShowLog($"Đã đọc {barcodeTexts.Count} mã vạch với {methodName}: {result}", Color.Green, ShowLogType.SaveLogToFile);
+                                return result;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Globals.ShowLog($"Lỗi khi đọc mã vạch với {methodName}: {ex.Message}", Color.Red, ShowLogType.SaveLogToFile);
+                }
+                
+                return string.Empty;
+            });
+        }
+
+        private List<ProcessingMethod> GetEnabledProcessingMethods()
+        {
+            var methods = new List<ProcessingMethod>();
+
+            if (Config.Instance.EnableContrastEnhancement)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Tăng độ tương phản",
+                    ProcessMethod = img => ImageProcessor.EnhanceContrast(img, Config.Instance.ContrastLevel)
+                });
+            }
+
+            if (Config.Instance.EnableSharpening)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Làm nét ảnh",
+                    ProcessMethod = img => ImageProcessor.SharpenImage(img, Config.Instance.SharpeningLevel)
+                });
+            }
+
+            if (Config.Instance.EnableBrightnessAdjustment)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Điều chỉnh độ sáng",
+                    ProcessMethod = img => ImageProcessor.AdjustBrightness(img, Config.Instance.BrightnessLevel)
+                });
+            }
+
+            if (Config.Instance.EnableGammaCorrection)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Gamma correction",
+                    ProcessMethod = img => ImageProcessor.ApplyGammaCorrection(img, Config.Instance.GammaLevel)
+                });
+            }
+
+            if (Config.Instance.EnableBlurUnsharp)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Gaussian blur",
+                    ProcessMethod = img => ImageProcessor.ApplyGaussianBlur(img, Config.Instance.BlurRadius)
+                });
+            }
+
+            if (Config.Instance.EnableBinaryThreshold)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Binary threshold",
+                    ProcessMethod = img => ImageProcessor.ApplyBinaryThreshold(img, Config.Instance.ThresholdValue)
+                });
+            }
+
+            if (Config.Instance.EnableMorphological)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Erosion",
+                    ProcessMethod = img => ImageProcessor.ApplyErosion(img, Config.Instance.MorphologySize)
+                });
+
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Dilation",
+                    ProcessMethod = img => ImageProcessor.ApplyDilation(img, Config.Instance.MorphologySize)
+                });
+            }
+
+            if (Config.Instance.EnableHistogramEqualization)
+            {
+                methods.Add(new ProcessingMethod
+                {
+                    Name = "Histogram equalization",
+                    ProcessMethod = img => ImageProcessor.ApplyHistogramEqualization(img)
+                });
+            }
+
+            return methods;
+        }
+
+        private class ProcessingMethod
+        {
+            public string Name { get; set; }
+            public Func<Bitmap, Bitmap> ProcessMethod { get; set; }
         }
 
         private void DeleteAllImages()

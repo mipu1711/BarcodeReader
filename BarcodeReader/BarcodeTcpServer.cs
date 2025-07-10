@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace BarcodeReader
@@ -16,7 +17,7 @@ namespace BarcodeReader
         private int port;
         private bool hasRestarted = false; // Flag để đảm bảo chỉ restart 1 lần
 
-        public Func<string> OnBarcodeRead; // Hàm delegate trả về barcode khi có trigger
+        public Func<Task<string>> OnBarcodeReadAsync; // Hàm delegate async trả về barcode khi có trigger
 
         public void Start(int port)
         {
@@ -74,7 +75,7 @@ namespace BarcodeReader
                         Globals.ShowLog("Client connected", Color.Blue, ShowLogType.SaveLogToFile);
 
                         // Xử lý client trong thread riêng để có thể chấp nhận nhiều client
-                        Thread clientThread = new Thread(() => HandleClient(client));
+                        Thread clientThread = new Thread(async () => await HandleClientAsync(client));
                         clientThread.IsBackground = true;
                         clientThread.Start();
                     }
@@ -182,7 +183,7 @@ namespace BarcodeReader
             }
         }
 
-        private void HandleClient(TcpClient client)
+        private async Task HandleClientAsync(TcpClient client)
         {
             NetworkStream stream = null;
             try
@@ -203,8 +204,25 @@ namespace BarcodeReader
                                 string request = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
                                 if (request == "TRIGGER")
                                 {
-                                    // Khi nhận trigger, đọc barcode
-                                    string barcode = OnBarcodeRead?.Invoke() ?? "NO_BARCODE";
+                                    // Khi nhận trigger, đọc barcode với async
+                                    string barcode = "NO_BARCODE";
+                                    if (OnBarcodeReadAsync != null)
+                                    {
+                                        try
+                                        {
+                                            barcode = await OnBarcodeReadAsync.Invoke();
+                                            if (string.IsNullOrEmpty(barcode))
+                                            {
+                                                barcode = "NO_BARCODE";
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Globals.ShowLog($"Lỗi khi đọc barcode: {ex.Message}", Color.Red, ShowLogType.SaveLogToFile);
+                                            barcode = "ERROR";
+                                        }
+                                    }
+                                    
                                     byte[] data = Encoding.UTF8.GetBytes(barcode + "\n");
                                     stream.Write(data, 0, data.Length);
                                     stream.Flush();
